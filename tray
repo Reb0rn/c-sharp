@@ -1,0 +1,77 @@
+using System;
+using System.Drawing;
+using System.Net;
+using System.Windows.Forms;
+
+namespace TrayApp
+{
+    static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            // Создаём NotifyIcon
+            NotifyIcon trayIcon = new NotifyIcon();
+            trayIcon.Icon = new Icon("1.ico"); ; // начальная иконка
+            trayIcon.Text = "Моя программа";
+            trayIcon.Visible = true;
+
+            // Создаём контекстное меню
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            // Пункт 1: Инфо
+            menu.Items.Add("Инфо о программе", null, (s, e) =>
+            {
+                MessageBox.Show("Простая программа с иконкой в трее.\nВерсия 1.0", "Информация");
+            });
+
+            // Пункт 2: Скачать файл
+            menu.Items.Add("Скачать файл", null, (s, e) =>
+            {
+                try
+                {
+                    using (WebClient client = new WebClient())
+                    {
+                        string url = "https:///pki/ruc2.crl";
+                        string savePath = "ruc.crl"; // сохраняем рядом с exe
+                        client.DownloadFile(url, savePath);
+                        MessageBox.Show("Файл успешно скачан: " + savePath, "Скачивание");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Ошибка скачивания: " + ex.Message, "Ошибка");
+                }
+            });
+
+            // Пункт 3: Замена иконки
+            menu.Items.Add("Замена иконки", null, (s, e) =>
+            {
+                try
+                {
+                    trayIcon.Icon = new Icon("2.ico"); // файл должен лежать рядом с exe
+                    MessageBox.Show("Иконка заменена!", "Успех");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Ошибка замены иконки: " + ex.Message, "Ошибка");
+                }
+            });
+
+            // Пункт выхода
+            menu.Items.Add("Выход", null, (s, e) =>
+            {
+                trayIcon.Visible = false;
+                Application.Exit();
+            });
+
+            trayIcon.ContextMenuStrip = menu;
+
+            // Запускаем цикл приложения без формы
+            Application.Run();
+        }
+    }
+}
