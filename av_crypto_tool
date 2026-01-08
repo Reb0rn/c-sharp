@@ -1,0 +1,138 @@
+using System;
+using System.Diagnostics;
+using System.Text;
+using System.Windows;
+using System.Windows.Documents;
+using System.Windows.Media;
+using Microsoft.Win32;
+using System.IO;
+
+namespace WpfApp1_gui
+{
+    public partial class MainWindow : Window
+    {
+        private const string ConfigFileName = "config.txt";
+        private const string DefaultAvCmPath = @"c:\Program Files (x86)\Avest\AvPCM_nces\AvCmUt4.exe";
+
+        // Свойство для получения пути из файла config.txt
+        private string AvCmPath
+        {
+            get
+            {
+                try
+                {
+                    if (File.Exists(ConfigFileName))
+                    {
+                        string savedPath = File.ReadAllText(ConfigFileName).Trim();
+                        if (!string.IsNullOrEmpty(savedPath)) return savedPath;
+                    }
+                    else
+                    {
+                        File.WriteAllText(ConfigFileName, DefaultAvCmPath);
+                    }
+                }
+                catch { }
+                return DefaultAvCmPath;
+            }
+        }
+
+        public MainWindow()
+        {
+            InitializeComponent();
+        }
+
+        private void Browse_Click(object sender, RoutedEventArgs e)
+        {
+            OpenFileDialog ofd = new OpenFileDialog();
+            if (ofd.ShowDialog() == true) FilePathTxt.Text = ofd.FileName;
+        }
+
+        private async void Encrypt_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(FilePathTxt.Text) || string.IsNullOrEmpty(CertIdTxt.Text))
+            {
+                MessageBox.Show("Заполните путь / ID сертификата"); return;
+            }
+
+            string input = FilePathTxt.Text;
+            string output = input + ".p7e";
+            string certId = CertIdTxt.Text;
+
+            string args = $"-e \"{input}\" -o \"{output}\" -k {certId} -NA -LOG av_encrypt.log";
+            await RunAvCmCommand(args, "ШИФРОВАНИЕ");
+        }
+
+        private async void Decrypt_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(FilePathTxt.Text)) return;
+
+            string input = FilePathTxt.Text;
+            string output = input.Replace(".p7e", "").Replace(".enc", "") + ".txt";
+            string pass = PassBox.Password;
+
+            // Формируем аргументы динамически
+            string args = $"-d \"{input}\" -o \"{output}\"";
+
+            // Если пароль пустой, ключ -p не добавляется
+            if (!string.IsNullOrEmpty(pass))
+            {
+                args += $" -p {pass}";
+            }
+
+            args += " -LOG av_decrypt.log";
+
+            await RunAvCmCommand(args, "РАСШИФРОВАНИЕ");
+        }
+
+        private void ClearLog_Click(object sender, RoutedEventArgs e)
+        {
+            LogParagraph.Inlines.Clear();
+        }
+
+        private async System.Threading.Tasks.Task RunAvCmCommand(string args, string opName)
+        {
+            string currentExePath = AvCmPath;
+            AddLog($"\n>>> Запуск: {opName}\n", Brushes.Cyan);
+
+            try
+            {
+                await System.Threading.Tasks.Task.Run(() => {
+                    ProcessStartInfo psi = new ProcessStartInfo
+                    {
+                        FileName = "\"" + currentExePath + "\"",
+                        Arguments = args,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                        StandardOutputEncoding = Encoding.GetEncoding(1251)
+                    };
+
+                    using (Process p = Process.Start(psi))
+                    {
+                        string output = p.StandardOutput.ReadToEnd();
+                        string error = p.StandardError.ReadToEnd();
+                        p.WaitForExit();
+
+                        Dispatcher.Invoke(() => {
+                            if (!string.IsNullOrEmpty(output)) AddLog(output, Brushes.White);
+                            if (!string.IsNullOrEmpty(error)) AddLog("ИНФО: " + error, Brushes.Gray);
+
+                            AddLog($"\nКод выхода: {p.ExitCode}\n", p.ExitCode == 0 ? Brushes.Lime : Brushes.Red);
+                            LogBox.ScrollToEnd();
+                        });
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка. Проверьте путь в {ConfigFileName}\n{ex.Message}");
+            }
+        }
+
+        private void AddLog(string text, Brush color)
+        {
+            LogParagraph.Inlines.Add(new Run(text) { Foreground = color });
+        }
+    }
+}
